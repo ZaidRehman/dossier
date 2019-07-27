@@ -6,7 +6,7 @@
  * @flow
  */
 
-import React, {Fragment, useEffect, useState, useRef} from 'react';
+import React, { Fragment, useEffect, useState, useRef } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -15,13 +15,24 @@ import {
   Text,
   StatusBar,
   PermissionsAndroid,
-  Button
+  Button,
+  TextInput,
+  Clipboard
 } from 'react-native';
 import Geolocation from 'react-native-geolocation-service';
 import {
-  Header,
   Colors,
 } from 'react-native/Libraries/NewAppScreen';
+import AsyncStorage from '@react-native-community/async-storage';
+
+const storeData = async (key, value) => {
+  try {
+    await AsyncStorage.setItem(key, value)
+  } catch (e) {
+    // saving error
+    console.log(e)
+  }
+}
 
 function useInterval(callback, delay) {
   const savedCallback = useRef();
@@ -43,8 +54,7 @@ function useInterval(callback, delay) {
   }, [delay]);
 }
 
-export async function requestLocationPermission() 
-{
+export async function requestLocationPermission() {
   try {
     const granted = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
@@ -66,26 +76,59 @@ export async function requestLocationPermission()
 }
 
 const App = () => {
-  const [position, setPosition] = useState(0);
-  const [delay, setDelay] = useState(1000);
+  const [position, setPosition] = useState();
+  const [delay, setDelay] = useState(null);
+  const [locations, setLocations] = useState([]);
+  const [isTextVisible, setTextVisibility] = useState(false);
+
+  const writeToClipboard = async (val) => {
+    await Clipboard.setString(val);
+    alert('Copied to Clipboard!');
+  };
+
+  const stop = () => {
+    setPosition(null);
+    setDelay(null);
+  }
   const fetchLoc = async () => {
     if (await requestLocationPermission()) {
       Geolocation.getCurrentPosition(
-          (p) => {
-              console.log(p);
-              setPosition(p);
-          },
-          (error) => {
-              // See error code charts below.
-              console.log(error.code, error.message);
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        (p) => {
+          if (!position) {
+            setLocations(locations.concat(p));
+          } else if (
+              position.coords.longitude != p.coords.longitude || 
+              position.coords.latitude != p.coords.latitude
+            ) {
+               setLocations(locations.concat(p));
+            }
+            setPosition(p);
+        },
+        (error) => {
+          // See error code charts below.
+          console.log(error.code, error.message);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     }
   }
+  const getPersistedLocations = async () => {
+    const value = await AsyncStorage.getItem('locations');
+   if(value) {
+      setLocations(JSON.parse(value))
+    }
+  }
+
+  useEffect(() => {
+    getPersistedLocations()
+  }, [])
+  useEffect(() => {
+    storeData('locations', JSON.stringify(locations))
+  }, [locations])
   useInterval(() => {
     fetchLoc();
   }, delay);
+  
   return (
     <Fragment>
       <StatusBar barStyle="dark-content" />
@@ -93,12 +136,6 @@ const App = () => {
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           style={styles.scrollView}>
-          <Header />
-          {global.HermesInternal == null ? null : (
-            <View style={styles.engine}>
-              <Text style={styles.footer}>Engine: Hermes</Text>
-            </View>
-          )}
           <View style={styles.body}>
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Position</Text>
@@ -112,17 +149,37 @@ const App = () => {
                 time: <Text style={styles.highlight}>{position && new Date(position.timestamp).toString()}</Text>
               </Text>
               <Button
-                onPress={() => setDelay(1000)}
+                onPress={() => setDelay(5000)}
                 title="Start"
                 color="#841584"
                 accessibilityLabel="Start"
               />
               <Button
-                onPress={() => setDelay(null)}
+                onPress={stop}
                 title="Stop"
                 color="#841584"
                 accessibilityLabel="Stop"
               />
+              <Button
+                style={styles.utilityButton}
+                onPress={() => setTextVisibility(!isTextVisible)}
+                title={`${isTextVisible && 'Hide' || 'Show'} Collected Locations`}
+                accessibilityLabel="StShow Locationsop"
+              />
+              <Button
+                style={styles.utilityButton}
+                onPress={() => writeToClipboard(JSON.stringify(locations))}
+                title="Copy Locations"
+                accessibilityLabel="StShow Locationsop"
+              />
+              {isTextVisible && (
+                <TextInput
+                  style={{ height: 200, borderColor: 'gray', borderWidth: 1 }}
+                  multiline={true}
+                  numberOfLines={4}
+                  value={JSON.stringify(locations)}
+                />
+              )}
             </View>
           </View>
         </ScrollView>
@@ -168,6 +225,9 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     textAlign: 'right',
   },
+  utilityButton: {
+    marginTop: 8,
+  }
 });
 
 export default App;
