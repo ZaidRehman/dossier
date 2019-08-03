@@ -6,7 +6,7 @@
  * @flow
  */
 
-import React, { Fragment, useEffect, useState, useRef } from 'react';
+import React, { Fragment, useEffect, useState } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -14,7 +14,6 @@ import {
   View,
   Text,
   StatusBar,
-  PermissionsAndroid,
   Button,
   TextInput,
   Clipboard
@@ -23,57 +22,8 @@ import Geolocation from 'react-native-geolocation-service';
 import {
   Colors,
 } from 'react-native/Libraries/NewAppScreen';
-import AsyncStorage from '@react-native-community/async-storage';
-
-const storeData = async (key, value) => {
-  try {
-    await AsyncStorage.setItem(key, value)
-  } catch (e) {
-    // saving error
-    console.log(e)
-  }
-}
-
-function useInterval(callback, delay) {
-  const savedCallback = useRef();
-
-  // Remember the latest callback.
-  useEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
-
-  // Set up the interval.
-  useEffect(() => {
-    function tick() {
-      savedCallback.current();
-    }
-    if (delay !== null) {
-      let id = setInterval(tick, delay);
-      return () => clearInterval(id);
-    }
-  }, [delay]);
-}
-
-export async function requestLocationPermission() {
-  try {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        'title': 'Example App',
-        'message': 'Example App access to your location '
-      }
-    )
-    if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-      console.log("You can use the location")
-      return true;
-    } else {
-      console.log("location permission denied")
-      return false;
-    }
-  } catch (err) {
-    console.warn(err)
-  }
-}
+import { useInterval } from './src/hooks';
+import { requestLocationPermission, storeData, getPersistedLocations } from './src/services';
 
 const App = () => {
   const [position, setPosition] = useState();
@@ -86,9 +36,13 @@ const App = () => {
     alert('Copied to Clipboard!');
   };
 
-  const stop = () => {
-    setPosition(null);
-    setDelay(null);
+  const toggle = () => {
+    if (delay) {
+      setPosition(null);
+      setDelay(null);
+    } else {
+      setDelay(1000)
+    }
   }
   const fetchLoc = async () => {
     if (await requestLocationPermission()) {
@@ -97,12 +51,12 @@ const App = () => {
           if (!position) {
             setLocations(locations.concat(p));
           } else if (
-              position.coords.longitude != p.coords.longitude || 
-              position.coords.latitude != p.coords.latitude
-            ) {
-               setLocations(locations.concat(p));
-            }
-            setPosition(p);
+            position.coords.longitude != p.coords.longitude ||
+            position.coords.latitude != p.coords.latitude
+          ) {
+            setLocations(locations.concat(p));
+          }
+          setPosition(p);
         },
         (error) => {
           // See error code charts below.
@@ -112,23 +66,22 @@ const App = () => {
       );
     }
   }
-  const getPersistedLocations = async () => {
-    const value = await AsyncStorage.getItem('locations');
-   if(value) {
-      setLocations(JSON.parse(value))
-    }
+  const clearLocations = () => {
+    setLocations([])
   }
 
   useEffect(() => {
-    getPersistedLocations()
+    getPersistedLocations().then(res => {
+      setLocations(res);
+    });
   }, [])
   useEffect(() => {
-    storeData('locations', JSON.stringify(locations))
-  }, [locations])
+    storeData('locations', JSON.stringify(locations));
+  }, [locations]);
   useInterval(() => {
     fetchLoc();
   }, delay);
-  
+
   return (
     <Fragment>
       <StatusBar barStyle="dark-content" />
@@ -149,27 +102,20 @@ const App = () => {
                 time: <Text style={styles.highlight}>{position && new Date(position.timestamp).toString()}</Text>
               </Text>
               <Button
-                onPress={() => setDelay(5000)}
-                title="Start"
-                color="#841584"
-                accessibilityLabel="Start"
-              />
-              <Button
-                onPress={stop}
-                title="Stop"
-                color="#841584"
-                accessibilityLabel="Stop"
-              />
-              <Button
-                style={styles.utilityButton}
-                onPress={() => setTextVisibility(!isTextVisible)}
-                title={`${isTextVisible && 'Hide' || 'Show'} Collected Locations`}
-                accessibilityLabel="StShow Locationsop"
+                onPress={toggle}
+                title={delay ? "Pause" : "Start"}
+                color={delay ? "#87090f" : "#098747"}
               />
               <Button
                 style={styles.utilityButton}
                 onPress={() => writeToClipboard(JSON.stringify(locations))}
                 title="Copy Locations"
+                accessibilityLabel="StShow Locationsop"
+              />
+              <Button
+                style={styles.utilityButton}
+                onPress={() => setTextVisibility(!isTextVisible)}
+                title={`${isTextVisible && 'Hide' || 'Show'} Collected Locations`}
                 accessibilityLabel="StShow Locationsop"
               />
               {isTextVisible && (
@@ -178,8 +124,15 @@ const App = () => {
                   multiline={true}
                   numberOfLines={4}
                   value={JSON.stringify(locations)}
+                  editable={false}
                 />
               )}
+              <Button
+                style={styles.utilityButton}
+                onPress={clearLocations}
+                title="Clear Locations"
+                accessibilityLabel="Clear Locations"
+              />
             </View>
           </View>
         </ScrollView>
@@ -227,6 +180,7 @@ const styles = StyleSheet.create({
   },
   utilityButton: {
     marginTop: 8,
+    color: '#9e9e9e'
   }
 });
 
