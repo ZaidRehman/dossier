@@ -19,6 +19,7 @@ import {
   Clipboard
 } from 'react-native';
 import Geolocation from 'react-native-geolocation-service';
+import RNLocation from "react-native-location";
 import {
   Colors,
 } from 'react-native/Libraries/NewAppScreen';
@@ -74,12 +75,87 @@ const App = () => {
     getPersistedLocations().then(res => {
       setLocations(res);
     });
+    RNLocation
+      .configure({
+        distanceFilter: 0.2,
+        desiredAccuracy: {
+          ios: "best",
+          android: "highAccuracy"
+        },
+        androidProvider: "playServices",
+      })
+      .then(() => RNLocation.requestPermission({
+        ios: "whenInUse",
+        android: {
+          detail: "fine",
+          rationale: {
+            title: "Location permission",
+            message: "We use your location to demo the library",
+            buttonPositive: "OK",
+            buttonNegative: "Cancel"
+          }
+        }
+      }))
+      .then(granted => {
+        if (granted) {
+          RNLocation.subscribeToLocationUpdates(ls => {
+            console.log(ls)
+            setPosition(ls[0])
+            setLocations(locations.concat(ls));
+          });
+        }
+      })
+      .catch(err => {
+        alert(JSON.stringify(err));
+      });
   }, [])
   useEffect(() => {
     storeData('locations', JSON.stringify(locations));
   }, [locations]);
   useInterval(() => {
-    fetchLoc();
+    // fetchLoc();
+    // console.log('here')
+    // RNLocation
+    //   .configure({
+    //     desiredAccuracy: {
+    //       ios: "best",
+    //       android: "highAccuracy"
+    //     },
+    //     androidProvider: "playServices",
+    //   })
+    //   .then(() => RNLocation.requestPermission({
+    //     ios: "whenInUse",
+    //     android: {
+    //       detail: "fine",
+    //       rationale: {
+    //         title: "Location permission",
+    //         message: "We use your location to demo the library",
+    //         buttonPositive: "OK",
+    //         buttonNegative: "Cancel"
+    //       }
+    //     }
+    //   }))
+    //   .then(granted => {
+    //     if (granted) {
+    //       RNLocation
+    //         .getLatestLocation({ timeout: 60000 })
+    //         .then(p => {
+    //           console.log(p)
+    //           if (!position) {
+    //             setLocations(locations.concat(p));
+    //           } else if (
+    //             position.longitude != p.longitude ||
+    //             position.latitude != p.latitude
+    //           ) {
+    //             setLocations(locations.concat(p));
+    //           }
+    //           setPosition(p);
+    //         });
+    //     }
+    //   })
+    //   .catch(err => {
+    //     alert(JSON.stringify(err));
+    //   });
   }, delay);
 
   return (
@@ -93,19 +169,19 @@ const App = () => {
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Position</Text>
               <Text style={styles.sectionDescription}>
-                longitude: <Text style={styles.highlight}>{position && position.coords.longitude}</Text>
+                longitude: <Text style={styles.highlight}>{position && position.longitude}</Text>
               </Text>
               <Text style={styles.sectionDescription}>
-                latitude: <Text style={styles.highlight}>{position && position.coords.latitude}</Text>
+                latitude: <Text style={styles.highlight}>{position && position.latitude}</Text>
               </Text>
               <Text style={styles.sectionDescription}>
                 time: <Text style={styles.highlight}>{position && new Date(position.timestamp).toString()}</Text>
               </Text>
-              <Button
+              {/* <Button
                 onPress={toggle}
                 title={delay ? "Pause" : "Start"}
                 color={delay ? "#87090f" : "#098747"}
-              />
+              /> */}
               <Button
                 style={styles.utilityButton}
                 onPress={() => writeToClipboard(JSON.stringify(locations))}
